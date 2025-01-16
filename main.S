@@ -14,16 +14,13 @@
 .include "fileop.S"
 .include "debug.S"
 .include "ansi.S"
+.include "time.S"
 ################################################
 
 # Begin of data section
 .data
     .align 8
-    input_path: .asciz "input.txt"
-    .align 8
-    output_path: .asciz "output.txt"
-    .align 8
-    buffer: .zero 1024                            # Buffer to store the content
+    buffer: .zero 1024   # Buffer for reading the command
     .align 8
 
 ##################################################
@@ -43,14 +40,16 @@
 .macro print_prompt
     ANSI_CYN; print_lit "\n$>"
     ANSI_LGRN
-    lay   %sp, -256(%sp)
-    lay   %r2,    0(%sp)
-    pwd   %r2, 256
-    print %r2
+    lay   %sp, -256(%sp)  # Allocate buffer for the current directory
+    lay   %r2,    0(%sp)  # Buffer
+    pwd   %r2,  256       # Get the current directory
+    print %r2             # Print the current directory
     ANSI_RST
-    lay   %sp,  256(%sp)
+    lay   %sp,  256(%sp)  # Disallocate the buffer
     print_lit "$ "
 .endm
+
+##################################################
 
 # Begin of text section
 .text
@@ -84,26 +83,26 @@ command_loop:
 
 #=================================================================================
 .create:
-    larl %r2, buffer 
-    lay  %r2, 7(%r2)
-    open_file %r2, %r2, O_CREAT + O_EXCL + O_WRONLY
-    cijle %r2, 0, .create_error
-    close_file %r2
+    larl %r2, buffer                                #|
+    lay  %r2, 7(%r2)                                #| %r2 <- filename
+    open_file %r2, %r2, O_CREAT + O_EXCL + O_WRONLY # Open the file
+    cgijle %r2, 0, .create_error                    # If the file cannot be created, jump to error
+    close_file %r2                                  # Close the file
     j command_loop
 .create_error:
     print_error buffer, "Cannot create file"
     j command_loop
 #=================================================================================
 .rename:
-    larl   %r2, buffer
-    lay    %r2, 7(%r2)     # Move to the first character of the first string
+    larl   %r2, buffer     #|
+    lay    %r2, 7(%r2)     #| Move to the first character of the first string
     strchr %r3, %r2, 0x20  # Find the space character between the two strings
-    clije  %r3, 0, .rename_syntax_error
+    clgije %r3, 0, .rename_syntax_error
     lgfi   %r4, 0          #|
     stc    %r4, 0(%r3)     #| Null terminate the first string
     lay    %r3, 1(%r3)     # Move to the next character
     sys_rename
-    clijne %r2, 0, .rename_error
+    clgijne %r2, 0, .rename_error  # Compare Logical 64-bit with immediate (0) and jump if not equal
     j command_loop
 .rename_syntax_error:
     print_error buffer, "Syntax error"
@@ -113,20 +112,20 @@ command_loop:
     j command_loop
 #=================================================================================
 .delete:
-    larl %r2, buffer
-    lay  %r2, 7(%r2)
+    larl %r2, buffer                #|
+    lay  %r2, 7(%r2)                #| %r2 <- filename
     sys_unlink
-    clijne %r2, 0, .delete_error
+    clgijne %r2, 0, .delete_error   # errorcode != 0 -> error
     j command_loop
 .delete_error:
     print_error buffer, "Cannot delete file"
     j command_loop
 #=================================================================================
 .read:
-    larl   %r2, buffer 
-    lay    %r2, 5(%r2)
+    larl   %r2, buffer     #|
+    lay    %r2, 5(%r2)     #| Move to the first character of the first string
     strchr %r3, %r2, 0x20  # Find the space character between the two strings
-    clije  %r3, 0, .read_all
+    clgije %r3, 0, .read_all
     lgfi   %r4, 0          #|
     stc    %r4, 0(%r3)     #| Null terminate the first string
     lay    %r3, 1(%r3)     # Move to the next character
@@ -135,21 +134,21 @@ command_loop:
 .read_all:
     lgfi   %r3, 1000       # Read 1000 lines at most
 .read_read:
-    open_file %r2, %r0, O_RDONLY
-    cijle  %r0, 0, .read_error
-    lay    %sp, -4096(%sp)
-    lay    %r1, 0(%sp)
+    open_file %r2, %r0, O_RDONLY # Open the file (path in %r2, fd will be in %r0)
+    cgijle  %r0, 0, .read_error  # If the file cannot be opened, jump to error
+    lay    %sp, -4096(%sp)       # Allocate buffer for reading the file
+    lay    %r1, 0(%sp)           # Buffer
 .read_loop:
-    stc    0, 0(%r1)       # Null terminate the buffer
-    fgets  %r0, %r1, 4096
-    print  %r1
-    cgijl  %r2, 0, .read_done
+    stc    0, 0(%r1)             # Null terminate the buffer
+    fgets  %r0, %r1, 4096        # Read a line from the file
+    print  %r1                   # Print the line
+    cgijl  %r2, 0, .read_done    # If numberOfLines is specified, check if we have read enough lines
     putc_i '\n
-    agfi   %r3, -1
-    cgijh  %r3, 0, .read_loop
+    agfi   %r3, -1               # Decrement the number of lines
+    cgijh  %r3, 0, .read_loop    # If we have not read enough lines, continue reading
 .read_done:
-    lay    %sp,  4096(%sp)
-    close_file %r0
+    lay    %sp,  4096(%sp)       # Disallocate the buffer
+    close_file %r0               # Close the file
     j command_loop
 .read_error:
     print_error buffer, "Cannot read file"
@@ -175,7 +174,7 @@ command_loop:
     convert_newline %r3
     # Open the file
     open_file %r2, %r0, O_APPEND + O_WRONLY + O_CREAT
-    cijle   %r0, 0, .write_error
+    cgijle   %r0, 0, .write_error
     fprint  %r0, %r3
     fputc_i %r0 '\n
     close_file %r0
@@ -191,7 +190,7 @@ command_loop:
     larl %r2, buffer
     lay  %r2, 3(%r2)
     sys_chdir
-    clijne %r2, 0, .cd_error
+    clgijne %r2, 0, .cd_error
     j command_loop
 .cd_error:
     print_error buffer, "No such directory"
@@ -201,7 +200,7 @@ command_loop:
     larl %r2, buffer
     lay  %r2, 6(%r2)
     sys_mkdir
-    clijne %r2, 0, .mkdir_error
+    clgijne %r2, 0, .mkdir_error
     j command_loop
 .mkdir_error:
     print_error buffer, "Cannot create directory"
@@ -211,7 +210,7 @@ command_loop:
     larl %r2, buffer
     lay  %r2, 6(%r2)
     sys_rmdir
-    clijne %r2, 0, .rmdir_error
+    clgijne %r2, 0, .rmdir_error
     j command_loop
 .rmdir_error:
     print_error buffer, "Cannot remove directory"
@@ -258,7 +257,30 @@ command_loop:
     j command_loop
 #=================================================================================
 .time:
-    ANSI_MGN; print_lit "TODO\n"; ANSI_RST
+    lay   %sp, -24(%sp)  # Allocate for struct timeval tv
+    lay   %r2, 0(%sp)    # tv
+    lay   %r3, 16(%sp)   # tz
+    sys_timeofd
+    clgijne %r2, 0, .time_error
+    lgf   %r3, 16(%sp)   # Minutes of GMT Offset
+    msgfi %r3, 60        # Convert to seconds
+    lg    %r2, 0(%sp)    # tv.tv_sec
+    sgr   %r2, %r3       # Apply GMT Offset
+    lay   %sp, 24(%sp)   # Disallocate the timeval struct
+    ANSI_MGN
+    print_lit "Current time: "
+    ANSI_LMGNB
+    lay   %sp, -256(%sp) # Allocate Buffer for time string
+    lay   %r3, 0(%sp)    # Buffer
+    call  time_to_string # Convert time to string
+    lay   %r3, 0(%sp)    # Buffer
+    print %r3            # Print the time string
+    lay   %sp, 256(%sp)  # Disallocate the buffer
+    ANSI_RST
+    putc_i '\n
+    j command_loop
+.time_error:
+    print_error buffer, "Cannot get time"
     j command_loop
 #=================================================================================
 .help:

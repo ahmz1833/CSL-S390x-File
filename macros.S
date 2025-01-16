@@ -86,6 +86,7 @@
 .macro sys_rename  ; svc 38  ; .endm   # int rename(const char *oldpath, const char *newpath);
 .macro sys_mkdir   ; svc 39  ; .endm   # int mkdir(const char *pathname, mode_t mode);
 .macro sys_rmdir   ; svc 40  ; .endm   # int rmdir(const char *pathname);
+.macro sys_timeofd ; svc 78  ; .endm   # int gettimeofday(struct timeval *tv, struct timezone *tz);
 .macro sys_getdents; svc 141 ; .endm   # int getdents(unsigned int fd, struct linux_dirent *dirp, unsigned int count);
 .macro sys_getcwd  ; svc 183 ; .endm   # char *getcwd(char *buf, size_t size);
 
