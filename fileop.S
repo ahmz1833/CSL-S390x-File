@@ -17,6 +17,7 @@
 .eqv O_WRONLY,    00000001
 .eqv O_RDWR,      00000002
 .eqv O_CREAT,     00000100
+.eqv O_EXCL,      00000200
 .eqv O_APPEND,    00002000
 .eqv O_DIRECTORY, 00200000
 
@@ -31,13 +32,21 @@
     pop_multiple %r5, %r4, %r3, %r2, %r1, %r0
 .endm
 
-.macro open_file pathreg, fdreg, flag
+.macro open_file pathreg, fdreg, flag, mode=0744
     push_multiple %r0, %r0, %r1, %r2, %r3, %r4, %r5
     lay  %r2, 0(\pathreg)
     lgfi %r3, \flag
+    lgfi %r4, \mode
     sys_open
     stg  %r2, 48(%sp)
     pop_multiple %r5, %r4, %r3, %r2, %r1, %r0, \fdreg
+.endm
+
+.macro close_file fdreg
+    push_multiple %r0, %r1, %r2, %r3, %r4, %r5
+    lgr %r2, \fdreg
+    sys_close
+    pop_multiple %r5, %r4, %r3, %r2, %r1, %r0
 .endm
 
 .endif

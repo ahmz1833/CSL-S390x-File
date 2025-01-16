@@ -12,7 +12,7 @@
 .eqv    STRFUNCS_S_, 1
 
 .include "macros.S"
-
+.include "debug.S"
 #----------------------------------------------------------------------
 # Macro: strlen %dest, %basereg
 # Description: Calculate the length of a string
@@ -82,6 +82,28 @@
 .endm
 
 #----------------------------------------------------------------------
+# Macro: strchr %dest, %str, char_imm
+# Description: Find the first occurrence of a character in a string
+.macro strchr destreg, basereg, char_imm
+    push_multiple %r2, %r2, %r3
+    lay  %r2, 0(\basereg)
+    lgfi %r3, \char_imm
+    call _strchr
+    stg  %r2, 16(%sp)
+    pop_multiple %r3, %r2, \destreg
+.endm
+
+#----------------------------------------------------------------------
+# Macro: convert_newline %str
+# Description: Convert "\n" literals to newline characters in a string
+.macro convert_newline str
+    push %r2
+    lay %r2, 0(\str)
+    call _cvlf
+    pop %r2
+.endm
+
+#----------------------------------------------------------------------
 # Function: int32_t _strcmp(str1, str2, n)
 # Description: Compare two strings up to n characters
 _strncmp:
@@ -98,6 +120,52 @@ _strncmp:
 ._sncmp_end:
     sgrk %r2, %r7, %r8
     leave 0,  6 
+    ret
+
+#----------------------------------------------------------------------
+# Function: char* _strchr(str, c)
+_strchr:
+    enter 0,   6
+    lgfi  %r6, 0
+._strchr_loop:
+    llc   %r7, 0(%r6, %r2)                   # Load the character of the string to %r7
+    clrje %r7, %r3, ._strchr_ret             # If the character is equal to c, return the pointer
+    clije %r7, 0, ._strchr_end               # If the character is null, return null
+    agfi  %r6, 1                             # Move the string pointer to the next position
+    j     ._strchr_loop
+._strchr_end:
+    xgr   %r2, %r2                           # Return null
+    xgr   %r6, %r6
+._strchr_ret:
+    agr   %r2, %r6                           # Return the pointer
+    leave 0,   6
+    ret
+
+#----------------------------------------------------------------------
+# Function: void _cvlf(str)
+# Description: Convert "\n" literals to newline characters in a string
+_cvlf:
+    enter 0,  6
+    lgfi  %r6, 0
+    ._cvlf_loop:
+        llc    %r7, 0(%r6, %r2)             # Load the character of the string to %r7
+        clrje  %r7, 0, ._cvlf_end           # If the character is null, jump to end
+        # If we reach \ and the next character is n, replace it with newline character
+        agfi   %r6, 1                       # Increment the string pointer for next iteration
+        clijne %r7, 0x5C, ._cvlf_loop       # If the character is not '\', continue
+        llc    %r7, 0(%r6, %r2)             # Load the next character to %r7
+        clijne %r7, 'n, ._cvlf_loop         # If the next character is not 'n', continue
+        lgfi   %r7, 10                      # Load the newline character to %r7
+        stcy   %r7, -1(%r6, %r2)            # Replace the '\' with newline character
+        lgr    %r8, %r6                     # Load the string pointer to %r8
+        ._cvlf_memmove:
+            llc    %r7, 1(%r8, %r2)         # Load the next character to %r7
+            stcy   %r7, 0(%r8, %r2)         # Move the character to the previous position
+            agfi   %r8, 1                   # Move the string pointer to the next position
+            clijne %r7, 0, ._cvlf_memmove   # If the character is not null, continue
+        j ._cvlf_loop
+    ._cvlf_end:
+    leave 0,  6
     ret
 
 #----------------------------------------------------------------------

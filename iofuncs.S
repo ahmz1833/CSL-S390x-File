@@ -236,6 +236,7 @@ _fgets:
 ._fgets_loop:
     cgrjhe %r6, %r4, ._fgets_end
     fgetc  %r2, %r7
+    cgije  %r7, -1, ._fgets_eof
     stcy   %r7, -1(%r6, %r3)
     agfi   %r6, 1
     clijne %r7, 10, ._fgets_loop
@@ -245,6 +246,12 @@ _fgets:
     lgfi   %r7, 0
     stc    %r7, 0(%r6, %r3)  # Null terminate the string
     lgr    %r2, %r6          # return length of line
+    j      ._fgets_ret
+._fgets_eof:
+    lgfi   %r7, 0
+    stc    %r7, 0(%r6, %r3)  # Null terminate the string
+    lgfi   %r2, -1           # return -1 for EOF
+._fgets_ret:
     leave  0,   6
     ret
 
