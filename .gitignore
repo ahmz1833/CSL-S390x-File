@@ -35,6 +35,8 @@
 *.asm~
 *.inc~
 
+test/
+
 # Ignore build/ and output directories
 build/
 dist/

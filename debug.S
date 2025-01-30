@@ -29,23 +29,21 @@ debug_fmt4: .asciz ")\033[0m\n\0"
 .text
 .macro debugd reg
     .set _print_stream, STDERR
-    push  %a10
-    larl  %a10, debug_fmt
-    print %a10
+    print_rl debug_fmt
     print_lit "\reg"
-    larl  %a10, debug_fmt2
-    print %a10
+    print_rl debug_fmt2
+    push  %a10
     lgr   %a10, \reg
     srlg  %a10, %a10, 32
     print_num %a10, 16, 8
+    pop   %a10
+    push  %a10
     llgfr %a10, \reg
     print_num %a10, 16, 8
-    larl  %a10, debug_fmt3
-    print %a10
-    print_num \reg, 10, 1
-    larl  %a10, debug_fmt4
-    print %a10
     pop   %a10
+    print_rl debug_fmt3
+    print_num \reg, 10, 1
+    print_rl debug_fmt4
     .set _print_stream, STDOUT
 .endm
 
